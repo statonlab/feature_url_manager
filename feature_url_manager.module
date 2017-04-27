@@ -1,0 +1,131 @@
+<?php
+/**
+ * @file
+ * A description of what your module does.
+ */
+
+/**
+ * Implements hook_permission().
+ *
+ * Define access permissions.
+ */
+function feature_url_manager_permission()
+{
+    $items = [
+        'administer feature urls' => [
+            'title' => t('Administer Feature URLs'),
+            'description' => t('Manage feature urls per organism.'),
+        ],
+    ];
+
+    return $items;
+}
+
+/**
+ * Implements hook_menu().
+ *
+ * Define menu urls and their callbacks.
+ *
+ * @return mixed
+ */
+function feature_url_manager_menu()
+{
+    $items['admin/feature_url_manager'] = [
+        'title' => t('Feature URL Manager'),
+        'description' => t('Manage feature URLs'),
+        'page callback' => 'drupal_get_form',
+        'page arguments' => ['feature_url_manager_management_form'],
+        'access arguments' => ['administer feature urls'],
+        'type' => MENU_NORMAL_ITEM,
+    ];
+
+    return $items;
+}
+
+/**
+ * Create the management form.
+ *
+ * @param $form
+ * @param $form_state
+ * @return mixed
+ */
+function feature_url_manager_management_form($form, &$form_state)
+{
+    // Get the list of organisms
+    $organisms = chado_query('select organism_id, common_name, genus, species from {organism}');
+
+    $organisms_list = ['' => '-- Choose Organism --'];
+
+    while ($organism = $organisms->fetchObject()) {
+        $organisms_list[$organism->organism_id] = t("{$organism->common_name} ({$organism->genus} {$organism->species})");
+    }
+
+    $form['description'] = [
+        '#type' => 'text',
+    ];
+
+    $form['organism'] = [
+        '#prefix' => t('<p>This form provides a method to change existing feature URLs and would remove any dead or duplicate links to a feature.</p>'),
+        '#title' => t('Organism'),
+        '#type' => 'select',
+        '#description' => t('Select the organism you\'d like to fix.'),
+        '#options' => $organisms_list,
+        '#attributes' => ['class' => ['form-control']],
+        '#default_value' => empty($form_state['prefix']) ? 'feature/' : $form_state['prefix'],
+        '#required' => true,
+    ];
+
+    $form['prefix'] = [
+        '#title' => t('URL Prefix'),
+        '#description' => t('Enter the prefix for the feature url. Entering <code>feature/</code>, for example, would update feature urls to reflect <code>feature/feature.uniquename</code>.'),
+        '#type' => 'textfield',
+        '#default_value' => empty($form_state['prefix']) ? 'feature/' : $form_state['prefix'],
+        '#required' => true,
+    ];
+
+    $form['submit'] = [
+        '#type' => 'submit',
+        '#value' => t('Submit'),
+    ];
+
+    return $form;
+}
+
+/**
+ * Implements hook_submit().
+ *
+ * @param $form
+ * @param $form_state
+ */
+function feature_url_manager_management_form_submit($form, &$form_state)
+{
+    $values = $form_state['values'];
+
+    if ($values['organism'] === 'all') {
+        feature_url_manager_fix_all($values);
+
+        return;
+    }
+
+    feature_url_manager_fix_one($values);
+
+    drupal_set_message('Feature URLs were fixed successfully');
+}
+
+function feature_url_manager_fix_all($values)
+{
+}
+
+function feature_url_manager_fix_one($values)
+{
+    $sql = "UPDATE url_alias
+              SET alias=:prefix||CF.uniquename
+              FROM [chado_feature] AS PF 
+              JOIN {feature} AS CF ON CF.feature_id=PF.feature_id
+              WHERE CF.organism_id = :organism_id
+                AND url_alias.source='node/' || PF.nid";
+
+    $prefix = trim($values['prefix'], '/').'/';
+
+    chado_query($sql, [':prefix' => $prefix,':organism_id' => $values['organism']]);
+}

@@ -1,0 +1,5 @@
+name = Feature Url Manager
+description = Change url format for features related to an organism.
+core = 7.x
+version = 7.x-1.x-dev
+dependencies = tripal_organism
