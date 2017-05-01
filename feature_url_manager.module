@@ -65,22 +65,35 @@ function feature_url_manager_management_form($form, &$form_state)
     ];
 
     $form['organism'] = [
-        '#prefix' => t('<p>This form provides a method to change existing feature URLs and would remove any dead or duplicate links to a feature.</p>'),
+        '#prefix' => t('<p>This form allows you to change existing feature URLs for a specific organism. This form can be used instead of '.l('Tripal Feature Settings', '/admin/tripal/chado/tripal_feature/configuration').', which applies the change to all features. Applying the effect to only one organism speeds up the process and does not require a Tripal job to be submitted.</p>'),
         '#title' => t('Organism'),
         '#type' => 'select',
         '#description' => t('Select the organism you\'d like to fix.'),
         '#options' => $organisms_list,
         '#attributes' => ['class' => ['form-control']],
-        '#default_value' => empty($form_state['prefix']) ? 'feature/' : $form_state['prefix'],
+        '#default_value' => current($organisms_list),
         '#required' => true,
     ];
 
     $form['prefix'] = [
-        '#title' => t('URL Prefix'),
-        '#description' => t('Enter the prefix for the feature url. Entering <code>feature/</code>, for example, would update feature urls to reflect <code>feature/feature.uniquename</code>.'),
+        '#title' => t('URL'),
+        '#description' => t('Enter the prefix for the feature url. Entering <code>feature/[feature_id]</code>, for example, would update the url of the feature that has ID 1 to <code>feature/1</code>.'),
         '#type' => 'textfield',
-        '#default_value' => empty($form_state['prefix']) ? 'feature/' : $form_state['prefix'],
+        '#default_value' => 'feature/[uniquename]',
         '#required' => true,
+    ];
+
+    $form['tokens_field'] = [
+        '#type' => 'fieldset',
+        '#title' => t('Available Tokens'),
+        '#collapsible' => true,
+        '#collapsed' => true,
+    ];
+
+    $form['tokens_field']['paragraph'] = [
+        '#title' => t('<p>The following is a list of available tokens:</p>'),
+        '#type' => 'item',
+        '#markup' => '<ul>'.'<li>[uniquename] The unique name of the feature</li>'.'<li>[name] The name of the feature.</li>'.'<li>[feature_id] The ID of the feature</li>'.'</ul>',
     ];
 
     $form['submit'] = [
@@ -89,6 +102,16 @@ function feature_url_manager_management_form($form, &$form_state)
     ];
 
     return $form;
+}
+
+function feature_url_manager_management_form_validate($form, &$form_state)
+{
+    $values = $form_state['values'];
+
+    preg_match_all('/(\[uniquename\]|\[name\]|\[feature_id\])/i', $values['prefix'], $matches);
+    if (count($matches[0]) === 0) {
+        form_set_error('prefix', 'The URL field must contain a token. A list of available tokens can be found below.');
+    }
 }
 
 /**
@@ -101,31 +124,53 @@ function feature_url_manager_management_form_submit($form, &$form_state)
 {
     $values = $form_state['values'];
 
-    if ($values['organism'] === 'all') {
-        feature_url_manager_fix_all($values);
-
-        return;
-    }
-
     feature_url_manager_fix_one($values);
 
     drupal_set_message('Feature URLs were fixed successfully');
 }
 
-function feature_url_manager_fix_all($values)
-{
-}
-
+/**
+ * Fix one organism.
+ *
+ * @param $values
+ */
 function feature_url_manager_fix_one($values)
 {
+    $map = [
+        '[uniquename]' => 'CF.uniquename',
+        '[name]' => 'CF.name',
+        '[feature_id]' => 'CF.feature_id',
+    ];
+
+    $link = explode('/', $values['prefix']);
+
+    $prefix = [];
+    $query = '';
+    foreach ($link as $key => $part) {
+        if (in_array($part, array_keys($map))) {
+            if (strlen($query) === 0) {
+                $query = $map[$part];
+            } else {
+                $query .= " || '/' || {$map[$part]}";
+            }
+            continue;
+        }
+
+        if (strlen($query) > 0) {
+            $prefix[":prefix{$key}"] = '/'.trim($part, '/');
+            $query .= " || :prefix{$key}";
+        } else {
+            $prefix[":prefix{$key}"] = trim($part, '/');
+            $query = ":prefix{$key}";
+        }
+    }
+
     $sql = "UPDATE url_alias
-              SET alias=:prefix||CF.uniquename
+              SET alias={$query}
               FROM [chado_feature] AS PF 
               JOIN {feature} AS CF ON CF.feature_id=PF.feature_id
               WHERE CF.organism_id = :organism_id
                 AND url_alias.source='node/' || PF.nid";
 
-    $prefix = trim($values['prefix'], '/').'/';
-
-    chado_query($sql, [':prefix' => $prefix,':organism_id' => $values['organism']]);
+    chado_query($sql, array_merge([':organism_id' => $values['organism']], $prefix));
 }
