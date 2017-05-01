@@ -1,7 +1,9 @@
 <?php
 /**
- * @file
- * A description of what your module does.
+ * @file feature_url_manager.module
+ *
+ * Allows admins to change urls of features for specific organisms in one query.
+ * This speeds up the process significantly compared to submitting a tripal job.
  */
 
 /**
