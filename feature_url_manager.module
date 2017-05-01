@@ -79,7 +79,7 @@ function feature_url_manager_management_form($form, &$form_state)
 
     $form['prefix'] = [
         '#title' => t('URL'),
-        '#description' => t('Enter the prefix for the feature url. Entering <code>feature/[feature_id]</code>, for example, would update the url of the feature that has ID 1 to <code>feature/1</code>.'),
+        '#description' => t('Enter the feature\'s new URL. Entering <code>feature/[feature_id]</code>, for example, would update the url of the feature that has ID 1 to <code>feature/1</code>.'),
         '#type' => 'textfield',
         '#default_value' => 'feature/[uniquename]',
         '#required' => true,
